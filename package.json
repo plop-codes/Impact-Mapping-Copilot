@@ -1,0 +1,7 @@
+{
+  "name": "impact-mapping-copilot",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ]
+}

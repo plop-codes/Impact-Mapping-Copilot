@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.js.map
+.env
+.env.local
+.idea
+.claude/settings.local.json
+/test.json
+apps/backend/.board-data.json
+apps/backend/dist/

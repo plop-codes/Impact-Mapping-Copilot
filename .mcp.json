@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "impact-mapping-copilot": {
+      "command": "node",
+      "args": ["apps/backend/dist/index.js"]
+    }
+  }
+}
