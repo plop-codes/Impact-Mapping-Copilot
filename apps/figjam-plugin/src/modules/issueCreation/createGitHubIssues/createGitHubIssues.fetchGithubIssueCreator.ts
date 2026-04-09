@@ -89,11 +89,6 @@ export class FetchGithubIssueCreator implements GithubIssueCreator {
         elementIdToNumber[issue.elementId] = existing.issueNumber;
         elementIdToId[issue.elementId] = existing.issueRestId;
 
-        const optionId = optionByName[elementType];
-        if (optionId) {
-          await this.projectClient.setSingleSelectFieldValue(projectId, existing.itemId, elementTypeField.id, optionId);
-        }
-
         updated++;
         this.logger(`Issue #${existing.issueNumber} mise à jour (${i + 1}/${issues.length})`);
       } else {

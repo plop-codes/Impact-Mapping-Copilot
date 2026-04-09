@@ -1,5 +1,6 @@
 import type { Fetcher, GithubConfig, Logger } from './githubTypes';
 import type { GlossaryEntry } from '../../boardAnalysis/analyzeContextElements/contextElements';
+import { GithubApiError, githubFetch } from './createGitHubIssues.githubApiError';
 
 export type SingleSelectField = {
   id: string;
@@ -32,13 +33,27 @@ export class GithubProjectClient {
   }
 
   async detectIsOrg(): Promise<boolean> {
-    const res = await this.fetcher(`https://api.github.com/users/${this.config.owner}`, {
-      method: 'GET',
-      headers: this.headers,
-    });
-    if (!res.ok) return false;
-    const data = await res.json();
-    return data.type === 'Organization';
+    const url = `https://api.github.com/users/${this.config.owner}`;
+    try {
+      const res = await githubFetch(this.fetcher, url, {
+        method: 'GET',
+        headers: this.headers,
+      });
+      const data = await res.json();
+      return data.type === 'Organization';
+    } catch (error) {
+      if (error instanceof GithubApiError && error.status === 404) {
+        throw new GithubApiError(
+          [
+            `Owner GitHub introuvable (404).`,
+            `URL : ${url}`,
+            `Vérifie l'owner dans le formulaire (sans "https://", sans slash final).`,
+          ].join('\n'),
+          404,
+        );
+      }
+      throw error;
+    }
   }
 
   async getProjectId(isOrg: boolean): Promise<string> {
@@ -289,13 +304,21 @@ export class GithubProjectClient {
   }
 
   private async graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
-    const res = await this.fetcher(this.graphqlUrl, {
+    const res = await githubFetch(this.fetcher, this.graphqlUrl, {
       method: 'POST',
       headers: this.headers,
       body: JSON.stringify({ query, variables }),
     });
     const json = await res.json();
-    if (json.errors) throw new Error(json.errors[0].message);
+    if (json.errors) {
+      throw new GithubApiError(
+        [
+          `Erreur GraphQL GitHub.`,
+          `URL : ${this.graphqlUrl}`,
+          `Détail : ${json.errors[0].message}`,
+        ].join('\n'),
+      );
+    }
     return json.data as T;
   }
 }

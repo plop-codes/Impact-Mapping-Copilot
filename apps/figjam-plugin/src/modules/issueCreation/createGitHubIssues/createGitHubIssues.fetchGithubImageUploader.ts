@@ -1,5 +1,6 @@
 import type { GithubImageUploader } from './githubImageUploader';
 import type { Fetcher, GithubConfig } from './createGitHubIssues.fetchGithubIssueCreator';
+import { GithubApiError, githubFetch } from './createGitHubIssues.githubApiError';
 
 export class FetchGithubImageUploader implements GithubImageUploader {
   private readonly headers: Record<string, string>;
@@ -29,29 +30,28 @@ export class FetchGithubImageUploader implements GithubImageUploader {
     if (sha) payload.sha = sha;
 
     const url = `${this.apiBaseUrl}/contents/${path}`;
-    const res = await this.fetcher(url, {
+    const res = await githubFetch(this.fetcher, url, {
       method: 'PUT',
       headers: this.headers,
       body: JSON.stringify(payload),
     });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`Upload image failed: ${res.status} ${errorText}`);
-    }
 
     const data = await res.json();
     return data.content.download_url;
   }
 
   private async getExistingFileSha(path: string): Promise<string | undefined> {
-    const res = await this.fetcher(`${this.apiBaseUrl}/contents/${path}`, {
-      method: 'GET',
-      headers: this.headers,
-    });
-    if (!res.ok) return undefined;
-    const data = await res.json();
-    return data.sha;
+    try {
+      const res = await githubFetch(this.fetcher, `${this.apiBaseUrl}/contents/${path}`, {
+        method: 'GET',
+        headers: this.headers,
+      });
+      const data = await res.json();
+      return data.sha;
+    } catch (error) {
+      if (error instanceof GithubApiError && error.status === 404) return undefined;
+      throw error;
+    }
   }
 
   private uint8ArrayToBase64(bytes: Uint8Array): string {

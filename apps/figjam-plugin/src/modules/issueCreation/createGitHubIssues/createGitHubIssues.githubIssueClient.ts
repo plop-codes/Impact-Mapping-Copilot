@@ -2,6 +2,7 @@ import type { IssuableElement } from '../issuableElement';
 import type { GithubImageUploader } from './githubImageUploader';
 import type { Fetcher, GithubConfig, Logger } from './githubTypes';
 import { AutoBodyMarkers } from './autoBodyMarkers';
+import { GithubApiError, githubFetch } from './createGitHubIssues.githubApiError';
 
 export class GithubIssueClient {
   private readonly headers: Record<string, string>;
@@ -30,12 +31,11 @@ export class GithubIssueClient {
     };
     if (labels.length > 0) payload.labels = labels;
     if (milestoneNumber) payload.milestone = milestoneNumber;
-    const res = await this.fetcher(`${this.apiBaseUrl}/issues`, {
+    const res = await githubFetch(this.fetcher, `${this.apiBaseUrl}/issues`, {
       method: 'POST',
       headers: this.headers,
       body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
     return res.json();
   }
 
@@ -50,41 +50,50 @@ export class GithubIssueClient {
     const payload: Record<string, unknown> = { title: issue.title, body: wrappedBody };
     if (labels.length > 0) payload.labels = labels;
     if (milestoneNumber) payload.milestone = milestoneNumber;
-    const res = await this.fetcher(`${this.apiBaseUrl}/issues/${issueNumber}`, {
-      method: 'PATCH',
-      headers: this.headers,
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) this.logger(`Update #${issueNumber} failed: ${res.status} ${await res.text()}`, 'error');
+    try {
+      await githubFetch(this.fetcher, `${this.apiBaseUrl}/issues/${issueNumber}`, {
+        method: 'PATCH',
+        headers: this.headers,
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      if (error instanceof GithubApiError) {
+        this.logger(`Update #${issueNumber} échoué :\n${error.message}`, 'error');
+        return;
+      }
+      throw error;
+    }
   }
 
   async ensureMilestones(milestoneNames: string[]): Promise<Record<string, number>> {
     const milestoneByName: Record<string, number> = {};
     if (milestoneNames.length === 0) return milestoneByName;
 
-    const res = await this.fetcher(`${this.apiBaseUrl}/milestones?state=open&per_page=100`, {
+    const res = await githubFetch(this.fetcher, `${this.apiBaseUrl}/milestones?state=open&per_page=100`, {
       method: 'GET',
       headers: this.headers,
     });
-    if (res.ok) {
-      const existing: { number: number; title: string }[] = await res.json();
-      for (const m of existing) {
-        milestoneByName[m.title] = m.number;
-      }
+    const existing: { number: number; title: string }[] = await res.json();
+    for (const m of existing) {
+      milestoneByName[m.title] = m.number;
     }
 
     for (const name of milestoneNames) {
       if (milestoneByName[name]) continue;
-      const createRes = await this.fetcher(`${this.apiBaseUrl}/milestones`, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify({ title: name }),
-      });
-      if (createRes.ok) {
+      try {
+        const createRes = await githubFetch(this.fetcher, `${this.apiBaseUrl}/milestones`, {
+          method: 'POST',
+          headers: this.headers,
+          body: JSON.stringify({ title: name }),
+        });
         const data: { number: number } = await createRes.json();
         milestoneByName[name] = data.number;
-      } else {
-        this.logger(`Erreur création milestone "${name}": ${createRes.status}`, 'error');
+      } catch (error) {
+        if (error instanceof GithubApiError) {
+          this.logger(`Création milestone "${name}" échouée :\n${error.message}`, 'error');
+          continue;
+        }
+        throw error;
       }
     }
 
@@ -93,26 +102,30 @@ export class GithubIssueClient {
 
   async ensureLabels(labelNames: string[]): Promise<void> {
     const existingNames = new Set<string>();
-    const res = await this.fetcher(`${this.apiBaseUrl}/labels?per_page=100`, {
+    const res = await githubFetch(this.fetcher, `${this.apiBaseUrl}/labels?per_page=100`, {
       method: 'GET',
       headers: this.headers,
     });
-    if (res.ok) {
-      const labels: { name: string }[] = await res.json();
-      for (const label of labels) {
-        existingNames.add(label.name);
-      }
+    const labels: { name: string }[] = await res.json();
+    for (const label of labels) {
+      existingNames.add(label.name);
     }
 
     for (const name of labelNames) {
       if (existingNames.has(name)) continue;
-      const createRes = await this.fetcher(`${this.apiBaseUrl}/labels`, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify({ name, color: '6B7280' }),
-      });
-      if (!createRes.ok && createRes.status !== 422) {
-        this.logger(`Erreur création label "${name}": ${createRes.status}`, 'error');
+      try {
+        await githubFetch(this.fetcher, `${this.apiBaseUrl}/labels`, {
+          method: 'POST',
+          headers: this.headers,
+          body: JSON.stringify({ name, color: '6B7280' }),
+        });
+      } catch (error) {
+        if (error instanceof GithubApiError && error.status === 422) continue;
+        if (error instanceof GithubApiError) {
+          this.logger(`Création label "${name}" échouée :\n${error.message}`, 'error');
+          continue;
+        }
+        throw error;
       }
     }
   }
@@ -132,20 +145,28 @@ export class GithubIssueClient {
       const childId = elementIdToId[issue.elementId];
       if (!parentNumber || !childId) continue;
 
-      const res = await this.fetcher(`${this.apiBaseUrl}/issues/${parentNumber}/sub_issues`, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify({ sub_issue_id: childId }),
-      });
-      if (res.ok) {
+      try {
+        await githubFetch(this.fetcher, `${this.apiBaseUrl}/issues/${parentNumber}/sub_issues`, {
+          method: 'POST',
+          headers: this.headers,
+          body: JSON.stringify({ sub_issue_id: childId }),
+        });
         linked++;
         this.logger(`Sub-issue #${elementIdToNumber[issue.elementId]} → #${parentNumber}`);
-      } else if (res.status === 422) {
-        // Already linked — skip silently
-      } else if (res.status === 404) {
-        subIssuesAvailable = false;
-      } else {
-        this.logger(`Erreur sub-issue #${elementIdToNumber[issue.elementId]} → #${parentNumber}: ${res.status}`, 'error');
+      } catch (error) {
+        if (error instanceof GithubApiError && error.status === 422) {
+          // Already linked — skip silently
+          continue;
+        }
+        if (error instanceof GithubApiError && error.status === 404) {
+          subIssuesAvailable = false;
+          continue;
+        }
+        if (error instanceof GithubApiError) {
+          this.logger(`Erreur sub-issue #${elementIdToNumber[issue.elementId]} → #${parentNumber} :\n${error.message}`, 'error');
+          continue;
+        }
+        throw error;
       }
     }
 
@@ -181,7 +202,7 @@ export class GithubIssueClient {
   }
 
   async deleteIssue(issueNodeId: string): Promise<void> {
-    const res = await this.fetcher('https://api.github.com/graphql', {
+    const res = await githubFetch(this.fetcher, 'https://api.github.com/graphql', {
       method: 'POST',
       headers: this.headers,
       body: JSON.stringify({
@@ -190,16 +211,20 @@ export class GithubIssueClient {
       }),
     });
     const json = await res.json();
-    if (json.errors) this.logger(`Delete issue failed: ${json.errors[0].message}`, 'error');
+    if (json.errors) this.logger(`Suppression d'issue échouée : ${json.errors[0].message}`, 'error');
   }
 
   private async fetchExistingIssueBody(issueNumber: number): Promise<string> {
-    const res = await this.fetcher(`${this.apiBaseUrl}/issues/${issueNumber}`, {
-      method: 'GET',
-      headers: this.headers,
-    });
-    if (!res.ok) return '';
-    const data = await res.json();
-    return data.body ?? '';
+    try {
+      const res = await githubFetch(this.fetcher, `${this.apiBaseUrl}/issues/${issueNumber}`, {
+        method: 'GET',
+        headers: this.headers,
+      });
+      const data = await res.json();
+      return data.body ?? '';
+    } catch (error) {
+      if (error instanceof GithubApiError) return '';
+      throw error;
+    }
   }
 }
