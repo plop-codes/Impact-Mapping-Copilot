@@ -28,7 +28,9 @@ Appelle l'outil MCP `get_scenario_request` toutes les secondes en boucle infinie
 
 ### Étape 2 — Récupérer le contexte de l'impact mapping
 
-Lis le fichier `apps/backend/.board-data.json` avec l'outil Read (lecture directe du filesystem, PAS via MCP `get_board_data` qui a une limite de taille).
+Appelle l'outil MCP `get_board_data_path` pour obtenir le chemin absolu du fichier `.board-data.json`, puis lis ce fichier avec l'outil Read (lecture directe du filesystem, PAS via MCP `get_board_data` qui a une limite de taille).
+
+Passer par `get_board_data_path` rend le skill utilisable depuis n'importe quel cwd (par exemple depuis un autre projet qui utilise le même backend MCP en mode proxy).
 
 Ce fichier JSON contient :
 - `elements` : tous les éléments hiérarchisés (OBJECTIVE → ACTOR → IMPACT → ACTION → USER_STORY → RULE → SCENARIO)
@@ -82,16 +84,16 @@ Voici des exemples de scénarios bien formatés issus du board. Tu DOIS suivre c
 {
   "title": "Création valide",
   "body": "Étant donné que je suis DSI\nQuand je crée le compte utilisateur avec :\n- dupont.gérard@test.com \n- role : ADV\n\nAlors le compte utilisateur :\nid : un uuid valide\n- dupont.gérard@test.com \n- rôle : ADV\nest créé",
-  "testDrivers": ["ui", "backend-e2e", "backend-use-case"]
+  "testDrivers": ["backend-use-case", "backend-e2e", "ui"]
 }
 ```
 
-**Exemple 2 — Cas d'erreur (champ manquant) :**
+**Exemple 2 — Cas d'erreur (champ manquant → pas de backend-use-case, rejeté avant le use case) :**
 ```json
 {
   "title": "Création refusée si l'email est manquant",
   "body": "Étant donné que je suis DSI\nQuand je crée le compte utilisateur avec\nun rôle valide\nemail non renseigné\nAlors le compte utilisateur n'est pas créé\nEt je suis informé de l'erreur « email manquant »",
-  "testDrivers": ["ui", "backend-e2e"]
+  "testDrivers": ["backend-e2e", "ui"]
 }
 ```
 
@@ -100,16 +102,25 @@ Voici des exemples de scénarios bien formatés issus du board. Tu DOIS suivre c
 {
   "title": "Erreur lors de la sauvegarde",
   "body": "Étant donné que je suis DSI Et que la BDD est KO,\nQuand je crée le compte utilisateur avec :\nemail : email valide\nrôle : rôle valide\n\nAlors le compte utilisateur n'est pas créé\nEt je suis informé de l'erreur « erreur pendant la sauvegarde »",
-  "testDrivers": ["backend-use-case", "backend-e2e"]
+  "testDrivers": ["backend-use-case", "backend-e2e", "ui"]
 }
 ```
 
-**Exemple 4 — Règle avec un seul scénario :**
+**Exemple 4 — Deuxième violation de règle métier (même type que ex.5 → pas de backend-e2e) :**
 ```json
 {
-  "title": "Génération automatique d'un mot de passe temporaire",
-  "body": "Étant donné que je suis DSI\nQuand je crée le compte utilisateur avec :\nemail : dupont.gerard@test.com\nrôle : ADV\n\nAlors un mot de passe temporaire est automatiquement généré pour le compte\nEt ce mot de passe temporaire contient :\n8 caractères texte\n2 chiffres\n2 caractères spéciaux",
-  "testDrivers": ["backend-use-case", "backend-e2e"]
+  "title": "Refusé si mot de passe sans assez de chiffres",
+  "body": "Étant donné que je suis Dupont gérard\nEt que je suis enregistré comme compte utilisateur :\nid : 4abdaeff-a7d5-431a-9a85-3a6b2817217e\nemail : dupont.gerard@test.com\nrôle : ADV\n\nQuand je définis mon nouveau mot de passe : MonMotDePasse@! et la confirmation : MonMotDePasse@!\n\nAlors la définition est refusée et je suis informé que le mot de passe doit contenir au moins 2 chiffres",
+  "testDrivers": ["backend-use-case", "ui"]
+}
+```
+
+**Exemple 5 — Première violation de règle métier (premier du type → avec backend-e2e) :**
+```json
+{
+  "title": "Refusé si mot de passe trop court",
+  "body": "Étant donné que je suis Dupont gérard\nEt que je suis enregistré comme compte utilisateur :\nid : 4abdaeff-a7d5-431a-9a85-3a6b2817217e\nemail : dupont.gerard@test.com\nrôle : ADV\n\nQuand je définis mon nouveau mot de passe : Court@1! et la confirmation : Court@1!\n\nAlors la définition est refusée et je suis informé que le mot de passe doit contenir au moins 12 caractères",
+  "testDrivers": ["backend-use-case", "backend-e2e", "ui"]
 }
 ```
 
@@ -121,9 +132,24 @@ Voici des exemples de scénarios bien formatés issus du board. Tu DOIS suivre c
 - Sépare les blocs Étant donné / Quand / Alors par une ligne vide
 
 **Règles pour les testDrivers :**
-- `backend-use-case` : si la règle est testable unitairement côté backend
-- `backend-e2e` : si la règle nécessite un test d'intégration (BDD, API, etc.)
-- `ui` : si la règle a un impact visible côté interface utilisateur
+
+Les testDrivers reflètent les niveaux de test ATDD. Chaque scénario est marqué selon les couches qu'il exerce réellement :
+
+**`backend-use-case`** (test unitaire du use case, in-memory) :
+- **Tous les scénarios SAUF les données manquantes.** Les données manquantes sont rejetées par la couche contrôleur/validation avant d'atteindre le use case, donc elles ne sont pas testables à ce niveau.
+
+**`ui`** (test d'intégration UI) :
+- **Tous les scénarios.** Chaque branche a un impact visible côté interface (message de succès, message d'erreur, état du formulaire).
+
+**`backend-e2e`** (test end-to-end, vraie infra, HTTP, BDD) :
+- Le but du e2e est de couvrir **une fois chaque branche du contrôleur**, pas chaque variation métier. Le contrôleur a typiquement ces branches : succès, erreur métier (toutes les violations de règle passent par le même chemin), données manquantes/invalides (validation request), non trouvé, erreur technique.
+- Règles de marquage :
+  - **Cas nominal** : toujours `backend-e2e`
+  - **Violations de règle métier** : si plusieurs scénarios violent la même règle métier (ex : 2 formats invalides différents), **un seul** est marqué `backend-e2e` (le premier), car les autres empruntent la même branche contrôleur
+  - **Données manquantes / invalides** : toujours `backend-e2e` (et jamais `backend-use-case`, car rejeté avant le use case)
+  - **Non trouvé** : `backend-e2e` si c'est un type d'erreur distinct dans le contrôleur
+  - **Erreur technique** : `backend-e2e`
+  - Les autres scénarios du même type ne sont PAS marqués `backend-e2e`
 
 ### Étape 5 — Soumettre les scénarios
 
