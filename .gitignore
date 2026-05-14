@@ -8,3 +8,4 @@ dist/
 /test.json
 apps/backend/.board-data.json
 apps/backend/dist/
+.impact-mapping-copilot.pid

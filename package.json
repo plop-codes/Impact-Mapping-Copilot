@@ -3,5 +3,11 @@
   "private": true,
   "workspaces": [
     "apps/*"
-  ]
+  ],
+  "scripts": {
+    "server:start": "node apps/backend/dist/index.js > /tmp/impact-mapping-copilot.log 2>&1 & echo $! > .impact-mapping-copilot.pid && echo \"Server started on :3333 (PID $(cat .impact-mapping-copilot.pid)) — logs: /tmp/impact-mapping-copilot.log\"",
+    "server:stop": "pid=$(lsof -ti:3333 2>/dev/null); if [ -n \"$pid\" ]; then kill $pid && echo \"Server stopped (PID $pid)\"; else echo \"Server not running\"; fi; rm -f .impact-mapping-copilot.pid",
+    "server:restart": "npm run server:stop --silent; sleep 1; npm run server:start --silent",
+    "server:status": "pid=$(lsof -ti:3333 2>/dev/null); if [ -n \"$pid\" ]; then echo \"Running on :3333 (PID $pid)\"; else echo \"Not running\"; fi"
+  }
 }

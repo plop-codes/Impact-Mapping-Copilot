@@ -45,9 +45,8 @@ export class GetScenariosRequestWhenNonePendingE2eDriver implements GetScenarios
   }
 
   async givenNoScenarioRequestIsPending(): Promise<void> {
-    await this.testApp.callMcpTool('submit_scenarios', {
-      ruleId: 'cleanup',
-      scenarios: [],
+    await fetch(`${this.testApp.httpBaseUrl}/__internal/scenario-request/clear`, {
+      method: 'POST',
     });
   }
 

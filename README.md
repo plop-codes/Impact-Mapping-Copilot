@@ -90,6 +90,21 @@ This feature uses Claude Code as an MCP client to generate BDD scenarios for bus
 2. Open Claude Code **from the project root** — it reads `.mcp.json` and starts the MCP server automatically
 3. Open the plugin in FigJam (this connects the WebSocket to the backend)
 
+#### Running the backend across multiple Claude Code sessions
+
+The backend binds port `3333` (HTTP + WebSocket for the plugin). Only one process can own it at a time — additional Claude Code sessions launched from other projects automatically fall back to **proxy mode** and forward their MCP tool calls to the primary instance.
+
+To keep the primary instance running independently of any Claude Code session (so several sessions across projects can share it), use the npm scripts at the repo root:
+
+```bash
+npm run server:start     # launches the backend in the background on :3333
+npm run server:stop      # kills whatever is bound to :3333
+npm run server:restart   # stop + start
+npm run server:status    # shows PID if running
+```
+
+Logs are written to `/tmp/impact-mapping-copilot.log`. If you see *"Failed to reconnect to impact-mapping-copilot"* in `/mcp`, run `npm run server:restart` then reconnect via `/mcp`.
+
 #### Generating scenarios
 
 1. In FigJam, select a **Rule** shape (slate colored)

@@ -1,0 +1,21 @@
+{
+  "name": "@impact-mapping/github-sync",
+  "version": "0.1.0",
+  "description": "CLI + lib pour synchroniser une hierarchie d'impact mapping (parent agrege -> US -> sub-issues scenarios) vers GitHub, idempotent via marqueur HTML.",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "github-sync": "bin/github-sync.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test:unit": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -3,7 +3,7 @@ import type { GetScenariosRequestRepository, ScenarioRequest } from './getScenar
 export class GetScenariosRequestUseCase {
   constructor(private readonly repository: GetScenariosRequestRepository) {}
 
-  execute(): ScenarioRequest | null {
-    return this.repository.get();
+  async execute(): Promise<ScenarioRequest | null> {
+    return await this.repository.get();
   }
 }

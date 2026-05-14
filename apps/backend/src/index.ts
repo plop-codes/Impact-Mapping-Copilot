@@ -14,6 +14,7 @@ async function main(): Promise<void> {
   });
 
   new GenerateScenariosModule(server, connection);
+  process.stderr.write(`[mcp] Mode: ${connection.isProxy() ? 'proxy' : 'primary'}\n`);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

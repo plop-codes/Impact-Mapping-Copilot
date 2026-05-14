@@ -5,9 +5,6 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Inter, system-ui, sans-serif; font-size: 13px; padding: 16px; color: #333; }
     h2 { font-size: 15px; margin-bottom: 12px; }
-    label { display: block; font-weight: 600; margin-bottom: 4px; margin-top: 12px; }
-    input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
-    input:focus, select:focus { outline: none; border-color: #18A0FB; }
     button { margin-top: 16px; width: 100%; padding: 10px; background: #18A0FB; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
     button:disabled { background: #ccc; cursor: not-allowed; }
     button:hover:not(:disabled) { filter: brightness(0.9); }
@@ -21,45 +18,25 @@
   </style>
 </head>
 <body>
-  <h2>GitHub Issues</h2>
-
-  <label for="token">GitHub Token</label>
-  <input type="password" id="token" placeholder="ghp_..." />
-
-  <label for="owner">Owner</label>
-  <input type="text" id="owner" placeholder="my-org" />
-
-  <label for="repo">Repo</label>
-  <input type="text" id="repo" placeholder="my-repo" />
-
-  <label for="projectNumber">Project number</label>
-  <input type="number" id="projectNumber" placeholder="1" />
-
-  <button id="createBtn">Créer les issues</button>
-
-  <div id="selectionInfo" style="margin-top: 8px; font-size: 12px; color: #666;"></div>
-  <button id="syncSelectedBtn" disabled style="background: #EA580C;">Synchroniser la sélection</button>
-
-  <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
-    <div id="progress" style="flex: 1;"></div>
-    <button id="clearLogsBtn" style="margin-top: 0; width: auto; padding: 4px 8px; font-size: 11px; background: #999; border-radius: 4px;">Vider les logs</button>
-  </div>
-
-  <hr />
-  <h2>Créer un élément</h2>
+  <h2>Creer un element</h2>
   <div class="element-grid">
     <button data-element-type="OBJECTIVE" style="background: #1E3A8A;">Objectif</button>
     <button data-element-type="ACTOR" style="background: #7C3AED;">Acteur</button>
     <button data-element-type="IMPACT" style="background: #16A34A;">Impact</button>
     <button data-element-type="ACTION" style="background: #EA580C;">Action</button>
     <button data-element-type="USER_STORY" style="background: #FACC15; color: #333;">User Story</button>
-    <button data-element-type="RULE" style="background: #64748B;">Règle</button>
-    <button data-element-type="SCENARIO" style="background: #CBD5E1; color: #333;">Scénario</button>
+    <button data-element-type="RULE" style="background: #64748B;">Regle</button>
   </div>
 
   <hr />
-  <h2>Génération IA</h2>
-  <button id="generateScenariosBtn" disabled style="background: #CBD5E1; color: #333;">Générer les scénarios de cette règle</button>
+  <h2>Generation IA</h2>
+  <div id="selectionInfo" style="margin-top: 8px; font-size: 12px; color: #666;"></div>
+  <button id="generateScenariosBtn" disabled style="background: #CBD5E1; color: #333;">Generer les scenarios de cette regle</button>
+
+  <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+    <div id="progress" style="flex: 1;"></div>
+    <button id="clearLogsBtn" style="margin-top: 0; width: auto; padding: 4px 8px; font-size: 11px; background: #999; border-radius: 4px;">Vider les logs</button>
+  </div>
 
   <!-- {{SCRIPT}} -->
 </body>
