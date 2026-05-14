@@ -8,10 +8,10 @@ export class GetScenariosRequestMcpTool {
 
     server.tool(
       'get_scenario_request',
-      'Checks for a pending scenario generation request from the FigJam plugin. Returns the request (ruleId, ruleTitle) or { pending: false }. If pending, call get_board_data to get fresh context before generating scenarios.',
+      'Checks for a pending scenario generation request from the FigJam plugin. Returns the request enriched with the impact mapping hierarchy (rule, userStory, action, impact, actor, objective, plus boundedContext and domain on the userStory) and the business glossary, or { pending: false } if no request is pending. All context needed to generate scenarios is included in the response — no need to read any board file.',
       {},
-      () => {
-        const request = useCase.execute();
+      async () => {
+        const request = await useCase.execute();
 
         if (!request) {
           return {
@@ -26,6 +26,8 @@ export class GetScenariosRequestMcpTool {
               pending: true,
               ruleId: request.ruleId,
               ruleTitle: request.ruleTitle,
+              hierarchy: request.hierarchy ?? null,
+              glossary: request.glossary ?? [],
             }, null, 2),
           }],
         };
