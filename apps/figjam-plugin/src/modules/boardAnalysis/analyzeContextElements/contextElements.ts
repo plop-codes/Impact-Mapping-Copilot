@@ -6,39 +6,20 @@ export type GlossaryEntry = {
 };
 
 export type ContextElementsJson = {
-  productVision?: string[];
-  operationalActors?: string[];
   glossary?: GlossaryEntry[];
 };
 
 export class ContextElements {
-  private constructor(
-    private readonly productVision?: string[],
-    private readonly operationalActors?: string[],
-    private readonly glossary?: GlossaryEntry[],
-  ) {}
+  private constructor(private readonly glossary?: GlossaryEntry[]) {}
 
   static fromRawSections(sections: RawContextSection[]): ContextElements {
-    const productVision = this.extractTextContent(sections, 'vision produit');
-    const operationalActors = this.extractTextContent(sections, 'acteurs opérationnels');
-    const glossary = this.extractGlossary(sections);
-
-    return new ContextElements(productVision, operationalActors, glossary);
+    return new ContextElements(this.extractGlossary(sections));
   }
 
   toJson(): ContextElementsJson {
     const result: ContextElementsJson = {};
-    if (this.productVision?.length) result.productVision = this.productVision;
-    if (this.operationalActors?.length) result.operationalActors = this.operationalActors;
     if (this.glossary?.length) result.glossary = this.glossary;
     return result;
-  }
-
-  private static extractTextContent(sections: RawContextSection[], sectionName: string): string[] | undefined {
-    const section = sections.find(
-      (s) => s.name.trim().toLowerCase() === sectionName,
-    );
-    return section?.textContent?.length ? section.textContent : undefined;
   }
 
   private static extractGlossary(sections: RawContextSection[]): GlossaryEntry[] | undefined {

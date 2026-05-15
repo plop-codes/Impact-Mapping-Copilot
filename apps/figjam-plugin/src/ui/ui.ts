@@ -1,70 +1,4 @@
-import type { HierarchizedElementJson } from '../modules/boardAnalysis/impactMapping';
-
-let hierarchizedElements: HierarchizedElementJson[] = [];
-let selectedElementIds: string[] = [];
-let boardDataRefreshResolve: (() => void) | null = null;
-
 const MCP_SERVER_URL = 'http://localhost:3333';
-const MCP_WS_URL = 'ws://localhost:3333';
-
-function sendToMcpServer(data: {
-  elements: HierarchizedElementJson[];
-  warnings: string[];
-}): void {
-  fetch(`${MCP_SERVER_URL}/board-data`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  }).catch(() => {
-    // MCP server not running — silently ignore
-  });
-}
-
-function connectMcpWebSocket(): void {
-  let ws: WebSocket | null = null;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function connect(): void {
-    try {
-      ws = new WebSocket(MCP_WS_URL);
-    } catch {
-      scheduleReconnect();
-      return;
-    }
-
-    ws.onmessage = (event: MessageEvent) => {
-      try {
-        const msg = JSON.parse(event.data as string);
-        if (msg.type === 'REFRESH') {
-          postToPlugin('REQUEST_BOARD_DATA');
-        }
-      } catch {
-        // Invalid message, ignore
-      }
-    };
-
-    ws.onclose = () => {
-      ws = null;
-      scheduleReconnect();
-    };
-
-    ws.onerror = () => {
-      ws?.close();
-    };
-  }
-
-  function scheduleReconnect(): void {
-    if (reconnectTimer) return;
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null;
-      connect();
-    }, 5000);
-  }
-
-  connect();
-}
-
-connectMcpWebSocket();
 
 const progressDiv = document.getElementById('progress') as HTMLDivElement;
 const selectionInfoDiv = document.getElementById('selectionInfo') as HTMLDivElement;
@@ -102,7 +36,7 @@ onmessage = (event: MessageEvent) => {
   if (!msg) return;
 
   if (msg.type === 'SELECTION_CHANGED') {
-    selectedElementIds = msg.selectedElementIds as string[];
+    const selectedElementIds = msg.selectedElementIds as string[];
     selectionInfoDiv.textContent = selectedElementIds.length > 0
       ? `${selectedElementIds.length} element${selectedElementIds.length > 1 ? 's' : ''} selectionne${selectedElementIds.length > 1 ? 's' : ''}`
       : '';
@@ -117,24 +51,6 @@ onmessage = (event: MessageEvent) => {
       selectedRuleTitle = null;
       generateScenariosBtn.disabled = true;
     }
-  }
-
-  if (msg.type === 'BOARD_DATA') {
-    hierarchizedElements = msg.elements;
-    if (boardDataRefreshResolve) {
-      boardDataRefreshResolve();
-      boardDataRefreshResolve = null;
-    }
-    if (msg.warnings) {
-      for (const warning of msg.warnings) {
-        log(`! ${warning}`, 'error');
-      }
-    }
-
-    sendToMcpServer({
-      elements: hierarchizedElements,
-      warnings: msg.warnings ?? [],
-    });
   }
 
   if (msg.type === 'SCENARIO_CONTEXT') {

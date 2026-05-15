@@ -1,15 +1,3 @@
-export interface ExtractsProductVisionFromSectionDsl {
-  givenAProductVisionSectionWithStickyNotes(): void;
-  whenAnalyzingContextElements(): void;
-  thenProductVisionContainsStickyNoteTexts(): void;
-}
-
-export interface ExtractsOperationalActorsFromSectionDsl {
-  givenAnOperationalActorsSectionWithStickyNotes(): void;
-  whenAnalyzingContextElements(): void;
-  thenOperationalActorsContainsStickyNoteTexts(): void;
-}
-
 export interface ExtractsGlossaryFromTableDsl {
   givenAGlossarySectionWithATable(): void;
   whenAnalyzingContextElements(): void;

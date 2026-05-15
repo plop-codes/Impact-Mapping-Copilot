@@ -4,8 +4,6 @@ import type {
   RawTableData,
 } from './analyzeContextElements.contextReader';
 
-const CONTEXT_SECTION_NAMES = ['vision produit', 'acteurs opérationnels', 'glossaire'];
-
 export class AnalyzeContextElementsFigmaContextReader
   implements AnalyzeContextElementsContextReader
 {
@@ -15,29 +13,13 @@ export class AnalyzeContextElementsFigmaContextReader
     ) as SectionNode[];
 
     return sections
-      .filter((s) => CONTEXT_SECTION_NAMES.includes(s.name.trim().toLowerCase()))
+      .filter((s) => s.name.trim().toLowerCase() === 'glossaire')
       .map((section) => {
         const result: RawContextSection = { name: section.name };
-        const textContent = this.readTextContent(section);
-        if (textContent) result.textContent = textContent;
         const tableData = this.readTableData(section);
         if (tableData) result.tableData = tableData;
         return result;
       });
-  }
-
-  private readTextContent(section: SectionNode): string[] | undefined {
-    const texts: string[] = [];
-    for (const child of section.children) {
-      if (child.type === 'STICKY') {
-        const text = (child as StickyNode).text.characters.trim();
-        if (text) texts.push(text);
-      } else if (child.type === 'TEXT') {
-        const text = (child as TextNode).characters.trim();
-        if (text) texts.push(text);
-      }
-    }
-    return texts.length > 0 ? texts : undefined;
   }
 
   private readTableData(section: SectionNode): RawTableData | undefined {

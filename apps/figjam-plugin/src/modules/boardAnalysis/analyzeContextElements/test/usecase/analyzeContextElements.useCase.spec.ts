@@ -1,7 +1,5 @@
 import { describe, test } from 'vitest';
 import {
-  ExtractsProductVisionFromSectionDriver,
-  ExtractsOperationalActorsFromSectionDriver,
   ExtractsGlossaryFromTableDriver,
   ExtractsGlossaryWithMultipleBoundedContextsDriver,
   IgnoresEmptyGlossaryTermsDriver,
@@ -9,20 +7,6 @@ import {
 } from './analyzeContextElements.useCaseDriver';
 
 describe('AnalyzeContextElements use case', () => {
-  test('extracts product vision from section', () => {
-    const driver = new ExtractsProductVisionFromSectionDriver();
-    driver.givenAProductVisionSectionWithStickyNotes();
-    driver.whenAnalyzingContextElements();
-    driver.thenProductVisionContainsStickyNoteTexts();
-  });
-
-  test('extracts operational actors from section', () => {
-    const driver = new ExtractsOperationalActorsFromSectionDriver();
-    driver.givenAnOperationalActorsSectionWithStickyNotes();
-    driver.whenAnalyzingContextElements();
-    driver.thenOperationalActorsContainsStickyNoteTexts();
-  });
-
   test('extracts glossary from table', () => {
     const driver = new ExtractsGlossaryFromTableDriver();
     driver.givenAGlossarySectionWithATable();

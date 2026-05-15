@@ -3,11 +3,6 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createPluginConnection, type PluginConnection } from '../../pluginConnection.js';
 import { GenerateScenariosModule } from '../../../generateScenarios/generateScenarios.module.js';
-import { unlinkSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const BOARD_DATA_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '.board-data.json');
 
 export class TestApp {
   private static sharedInstance: TestApp | null = null;
@@ -55,10 +50,6 @@ export class TestApp {
     return `http://localhost:${this.connection.getPort()}`;
   }
 
-  get wsUrl(): string {
-    return `ws://localhost:${this.connection.getPort()}`;
-  }
-
   async callMcpTool(name: string, args: Record<string, unknown> = {}): Promise<{
     content: Array<{ type: string; text: string }>;
     isError?: boolean;
@@ -67,16 +58,12 @@ export class TestApp {
     return result as { content: Array<{ type: string; text: string }>; isError?: boolean };
   }
 
-  reset(): void {
-    try {
-      unlinkSync(BOARD_DATA_PATH);
-    } catch {
-      // file may not exist
-    }
+  async reset(): Promise<void> {
+    await fetch(`${this.httpBaseUrl}/__internal/scenario-request/clear`, { method: 'POST' });
   }
 
   private async cleanup(): Promise<void> {
-    this.reset();
+    await this.reset();
     await this.mcpClient.close();
     await this.mcpServer.close();
     await this.connection.close();

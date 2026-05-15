@@ -4,61 +4,11 @@ import { AnalyzeContextElementsInMemoryContextReader } from '../analyzeContextEl
 import { CommandResult } from '../../../../shared/result/commandResult';
 import type { ContextElementsJson } from '../../contextElements';
 import type {
-  ExtractsProductVisionFromSectionDsl,
-  ExtractsOperationalActorsFromSectionDsl,
   ExtractsGlossaryFromTableDsl,
   ExtractsGlossaryWithMultipleBoundedContextsDsl,
   IgnoresEmptyGlossaryTermsDsl,
   ReturnsNoGlossaryWhenNoTableInSectionDsl,
 } from '../analyzeContextElements.dsl';
-
-export class ExtractsProductVisionFromSectionDriver
-  implements ExtractsProductVisionFromSectionDsl
-{
-  private readonly contextReader = new AnalyzeContextElementsInMemoryContextReader();
-  private readonly useCase = new AnalyzeContextElementsUseCase(this.contextReader);
-  private result!: CommandResult<string>;
-
-  givenAProductVisionSectionWithStickyNotes(): void {
-    this.contextReader.feedSections([
-      { name: 'Vision produit', textContent: ['Notre vision est...', 'Un monde meilleur'] },
-    ]);
-  }
-
-  whenAnalyzingContextElements(): void {
-    this.result = this.useCase.execute();
-  }
-
-  thenProductVisionContainsStickyNoteTexts(): void {
-    expect(this.result.isSuccess()).toBe(true);
-    const json = this.result.getValue<ContextElementsJson>();
-    expect(json.productVision).toEqual(['Notre vision est...', 'Un monde meilleur']);
-  }
-}
-
-export class ExtractsOperationalActorsFromSectionDriver
-  implements ExtractsOperationalActorsFromSectionDsl
-{
-  private readonly contextReader = new AnalyzeContextElementsInMemoryContextReader();
-  private readonly useCase = new AnalyzeContextElementsUseCase(this.contextReader);
-  private result!: CommandResult<string>;
-
-  givenAnOperationalActorsSectionWithStickyNotes(): void {
-    this.contextReader.feedSections([
-      { name: 'Acteurs opérationnels', textContent: ['Product Owner', 'Développeur'] },
-    ]);
-  }
-
-  whenAnalyzingContextElements(): void {
-    this.result = this.useCase.execute();
-  }
-
-  thenOperationalActorsContainsStickyNoteTexts(): void {
-    expect(this.result.isSuccess()).toBe(true);
-    const json = this.result.getValue<ContextElementsJson>();
-    expect(json.operationalActors).toEqual(['Product Owner', 'Développeur']);
-  }
-}
 
 export class ExtractsGlossaryFromTableDriver
   implements ExtractsGlossaryFromTableDsl
@@ -174,9 +124,7 @@ export class ReturnsNoGlossaryWhenNoTableInSectionDriver
   private result!: CommandResult<string>;
 
   givenAGlossarySectionWithoutTable(): void {
-    this.contextReader.feedSections([
-      { name: 'Glossaire', textContent: ['Some text'] },
-    ]);
+    this.contextReader.feedSections([{ name: 'Glossaire' }]);
   }
 
   whenAnalyzingContextElements(): void {

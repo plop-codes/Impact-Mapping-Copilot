@@ -73,21 +73,13 @@ function buildHierarchyContext(
   return result;
 }
 
-async function analyzeAndSendBoardData(): Promise<Set<string>> {
+function computeKnownIds(): Set<string> {
   const analyzeResult = analyzeImpactMap.execute();
   if (analyzeResult.isFailure()) {
     figma.notify(`Erreur: ${analyzeResult.getError()}`);
     return new Set();
   }
-
   const impactMappingJson = analyzeResult.getValue<ImpactMappingJson>();
-
-  figma.ui.postMessage({
-    type: 'BOARD_DATA',
-    elements: impactMappingJson.hierarchizedElements,
-    warnings: impactMappingJson.warnings,
-  });
-
   return new Set(impactMappingJson.hierarchizedElements.map((e) => e.id));
 }
 
@@ -97,11 +89,7 @@ if (initialResult.isFailure()) {
   figma.notify(`Erreur: ${initialResult.getError()}`);
   figma.closePlugin();
 } else {
-  let knownIds = new Set<string>();
-
-  analyzeAndSendBoardData().then((ids) => {
-    knownIds = ids;
-  });
+  let knownIds = computeKnownIds();
 
   function sendSelectionUpdate(): void {
     const selectedElementIds = figma.currentPage.selection
@@ -145,10 +133,6 @@ if (initialResult.isFailure()) {
   }
 
   figma.ui.onmessage = async (msg) => {
-    if (msg.type === 'REQUEST_BOARD_DATA') {
-      const ids = await analyzeAndSendBoardData();
-      if (ids.size > 0) knownIds = ids;
-    }
     if (msg.type === 'REQUEST_SCENARIO_CONTEXT') {
       const ruleId = msg.ruleId as string;
       const impactMapResult = analyzeImpactMap.execute();
@@ -190,6 +174,7 @@ if (initialResult.isFailure()) {
         figma.ui.postMessage({ type: 'ELEMENT_CREATED', success: false, error: result.getError() });
       } else {
         figma.notify('Element cree');
+        knownIds = computeKnownIds();
         figma.ui.postMessage({ type: 'ELEMENT_CREATED', success: true });
       }
     }

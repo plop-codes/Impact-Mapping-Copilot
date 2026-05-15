@@ -54,9 +54,9 @@ npm run test:unit      # vitest run
 
 ## Serveur MCP — Démarrage
 
-Le serveur MCP est lancé **automatiquement par Claude Code** via la config `.mcp.json` à la racine du projet (`node apps/backend/dist/index.js`). Il communique via stdio avec Claude Code et expose un serveur HTTP+WebSocket sur le port 3333 pour le plugin FigJam.
+Le serveur MCP est lancé **automatiquement par Claude Code** via la config `.mcp.json` à la racine du projet (`node apps/backend/dist/index.js`). Il communique via stdio avec Claude Code et expose un serveur HTTP sur le port 3333 pour recevoir les `scenarioRequest` du plugin FigJam (POST `/scenario-request`). La communication est strictement plugin → backend ; il n'y a aucun canal retour backend → plugin (l'orchestrateur ATDD écrit directement sur GitHub via le CLI `github-sync`).
 
-**Mode primary vs proxy** : une seule instance peut binder le port 3333 (l'instance *primary*). Toute instance lancée alors que le port est déjà pris démarre automatiquement en mode *proxy* : son transport MCP stdio sert normalement ses tools, mais les repositories et l'envoi WebSocket au plugin sont remplacés par des appels HTTP `/__internal/*` vers l'instance primary. Permet d'ouvrir plusieurs sessions Claude Code (plusieurs projets) partageant la même connexion plugin. Implémenté dans `apps/backend/src/shared/pluginConnection.ts` et `apps/backend/src/generateScenarios/generateScenarios.module.ts`.
+**Mode primary vs proxy** : une seule instance peut binder le port 3333 (l'instance *primary*). Toute instance lancée alors que le port est déjà pris démarre automatiquement en mode *proxy* : son transport MCP stdio sert normalement le tool `get_scenario_request`, mais la repository est remplacée par des appels HTTP `/__internal/scenario-request/get` vers l'instance primary. Permet d'ouvrir plusieurs sessions Claude Code (plusieurs projets) partageant la même demande plugin courante. Implémenté dans `apps/backend/src/shared/pluginConnection.ts` et `apps/backend/src/generateScenarios/generateScenarios.module.ts`.
 
 **Scripts npm racine** pour gérer une instance primary persistante indépendante d'une session Claude Code :
 - `npm run server:start` — lance le backend en background sur :3333, logs dans `/tmp/impact-mapping-copilot.log`
@@ -73,14 +73,15 @@ Le serveur MCP est lancé **automatiquement par Claude Code** via la config `.mc
 
 Le plugin garde **uniquement** :
 1. Lire le board d'impact mapping (analyse des shapes, connecteurs, sections, propagation des releases)
-2. Pousser des `scenarioRequest` au backend MCP via WebSocket quand l'utilisateur clique "Générer les scénarios de cette règle"
+2. Pousser des `scenarioRequest` au backend MCP via HTTP POST `/scenario-request` (avec `ruleId`, `ruleTitle`, `hierarchy` agrégée, `glossary`) quand l'utilisateur clique "Générer les scénarios de cette règle"
 3. Créer manuellement de nouveaux éléments (OBJECTIVE, ACTOR, IMPACT, ACTION, USER_STORY, RULE) sur le board
 
 Le plugin a **perdu** :
 - Toute la sync GitHub (rapatriée dans `apps/github-sync/` et orchestrée depuis Claude Code)
-- L'analyse `productVision` / `operationalActors` / `glossary` (jamais utilisée par la nouvelle chaîne)
+- L'extraction des sections `vision produit` et `acteurs opérationnels` (jamais utilisée par la nouvelle chaîne — seul le `glossaire` reste lu et inclus dans `scenarioRequest`)
 - La création des shapes SCENARIO sur le board (la source de vérité des scénarios devient GitHub, plus le board)
 - La sync GitHub Project (Project field "figjam_element_id" remplacé par un marqueur HTML `<!-- figjam-id:* -->` dans le body)
+- Le canal retour backend → plugin (WebSocket `REFRESH`, POST `/board-data` au backend) : tout est mort puisque l'orchestrateur ATDD écrit directement sur GitHub. Plus de WebSocket nulle part.
 
 ---
 
@@ -88,8 +89,8 @@ Le plugin a **perdu** :
 
 ```
 Plugin FigJam (clic "générer scénarios")
-        ↓ WebSocket
-Backend MCP (scenarioRequest stocké)
+        ↓ HTTP POST /scenario-request
+Backend MCP (scenarioRequest stocké en mémoire)
         ↓ MCP tool get_scenario_request (polling)
 Claude Code skill wait-cycle-request (orchestrateur, Discac Yoda)
         ↓ sub-agent générateur Opus 4.7 (grill-me + génération JSON scénarios)
@@ -111,21 +112,14 @@ Sub-agent ATDD Opus 4.7 (RED → reviewer test-fidelity → commit RED → GREEN
 apps/figjam-plugin/src/
 ├── plugin.ts                              # Entry point (orchestre les use cases)
 ├── ui.html                                # UI du plugin (boutons de création + génération IA)
-├── ui/ui.ts                               # Logique UI (WebSocket avec MCP, postMessages)
+├── ui/ui.ts                               # Logique UI (HTTP POST scenarioRequest, postMessages plugin)
 ├── modules/
 │   ├── boardAnalysis/
 │   │   ├── element.ts                     # Types et constantes COLOR_TO_TYPE
 │   │   ├── impactMapping.ts               # Types et constantes liés à la hiérarchie
-│   │   └── analyzeImpactMap/
-│   │       ├── analyzeImpactMap.useCase.ts           # Use case — orchestrateur impact mapping
-│   │       ├── analyzeImpactMap.boardReader.ts       # Port (interface)
-│   │       ├── analyzeImpactMap.figmaBoardReader.ts  # Adaptateur Figma
-│   │       └── test/
-│   │           ├── analyzeImpactMap.dsl.ts
-│   │           ├── analyzeImpactMap.inMemoryBoardReader.ts
-│   │           └── usecase/
-│   │               ├── analyzeImpactMap.useCase.spec.ts
-│   │               └── analyzeImpactMap.useCaseDriver.ts
+│   │   ├── release.ts                     # Identification + assignation des releases (SectionNode)
+│   │   ├── analyzeImpactMap/              # Use case principal : lecture du board → hiérarchie + warnings
+│   │   └── analyzeContextElements/        # Use case : extraction du glossaire métier (section "Glossaire")
 │   ├── boardEdition/
 │   │   └── createBoardElement/            # Création manuelle d'éléments sur le board
 │   └── shared/
@@ -157,16 +151,17 @@ apps/github-sync/
 
 ```
 generateScenarios/
-├── generateScenarios.module.ts            # Wiring MCP tools + HTTP listeners
+├── generateScenarios.module.ts            # Wiring MCP tool + HTTP listeners + routes /__internal/* (proxy)
 ├── scenarioRequest.ts                     # Types : ScenarioRequest + HierarchyContext + GlossaryEntry
-├── scenarioRequests.inMemoryStore.ts      # Store in-memory de la demande en attente
-├── storeScenariosRequest/                 # HTTP listener : reçoit scenarioRequest enrichi (ruleId + ruleTitle + hierarchy + glossary) du plugin FigJam
-└── getScenariosRequest/                   # MCP tool : get_scenario_request — retourne la demande complète avec hiérarchie et glossaire
+├── scenarioRequest.inMemoryRepository.ts  # Repository in-memory partagée store/get (1 demande courante)
+├── storeScenariosRequest/                 # HTTP listener : reçoit scenarioRequest (ruleId + ruleTitle + hierarchy + glossary) du plugin FigJam sur POST /scenario-request
+└── getScenariosRequest/                   # MCP tool : get_scenario_request — retourne la demande complète avec hiérarchie et glossaire (+ httpRepository en mode proxy)
 ```
 
 Les modules supprimés (historique) :
 - `submitScenarios/` : la source de vérité des scénarios est désormais GitHub (sub-issues créées par le CLI `github-sync`)
 - `getImpactMappingContext/` (tool `get_board_data`) et `storeImpactMappingContext/` (écriture `.board-data.json`) : le contexte impact mapping + glossaire est désormais embarqué dans le payload `scenarioRequest` directement par le plugin FigJam au clic « Générer scénarios »
+- Canal `sendToPlugin` / WebSocket / routes `/__internal/plugin/*` : plus aucun retour backend → plugin nécessaire (l'orchestrateur ATDD écrit directement sur GitHub via le CLI `github-sync`)
 
 ---
 
