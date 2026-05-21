@@ -1,7 +1,22 @@
-import type { GlossaryEntry, HierarchyContext } from '../generateScenarios/scenarioRequest.js';
+import type {
+  GlossaryEntry,
+  HierarchyNode,
+  HierarchyRule,
+  HierarchyUserStory,
+} from '../generateScenarios/scenarioRequest.js';
+
+export type IterationHierarchy = {
+  userStory: HierarchyUserStory;
+  rules: HierarchyRule[];
+  section?: string;
+  action?: HierarchyNode;
+  impact?: HierarchyNode;
+  actor?: HierarchyNode;
+  objective?: HierarchyNode;
+};
 
 export type IterationUserStory = {
-  hierarchy: HierarchyContext;
+  hierarchy: IterationHierarchy;
   glossary: GlossaryEntry[];
 };
 

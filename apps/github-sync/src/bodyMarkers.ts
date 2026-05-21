@@ -1,7 +1,5 @@
 const AUTO_START_MARKER = '<!-- figjam:auto-start -->';
 const AUTO_END_MARKER = '<!-- figjam:auto-end -->';
-const AUTO_WARNING_START = 'Import automatique depuis FigJam — ne pas modifier cette section';
-const AUTO_WARNING_END = 'Fin section import automatique';
 
 const FIGJAM_ID_PREFIX = 'figjam-id:';
 
@@ -22,11 +20,7 @@ export function wrapAutoBody(figjamId: string, body: string): string {
   return [
     figjamIdMarker(figjamId),
     AUTO_START_MARKER,
-    AUTO_WARNING_START,
-    '',
     body,
-    '',
-    AUTO_WARNING_END,
     AUTO_END_MARKER,
     '---',
   ].join('\n');

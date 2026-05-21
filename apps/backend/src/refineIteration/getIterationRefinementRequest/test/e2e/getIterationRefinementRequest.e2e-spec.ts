@@ -9,20 +9,11 @@ describe('Get user stories in iteration for refinement', () => {
     const driver = new GetIterationRefinementRequestWhenPendingE2eDriver();
 
     await driver.givenTheServerIsRunning();
-    await driver.givenAnIterationRefinementRequestWasSent({
+    const request = {
       section: 'v1',
       userStories: [
         {
           hierarchy: {
-            rule: {
-              id: 'rule-1',
-              title: 'Validation des commandes',
-              body: 'Une commande doit avoir au moins une ligne',
-              examples: [
-                { id: 'ex-1', body: 'Commande avec 0 ligne -> refusée' },
-                { id: 'ex-2', body: 'Commande avec 1 ligne -> acceptée' },
-              ],
-            },
             rules: [
               {
                 id: 'rule-1',
@@ -39,41 +30,20 @@ describe('Get user stories in iteration for refinement', () => {
           },
           glossary: [{ term: 'Commande', definitions: { default: 'Demande client' } }],
         },
+        {
+          hierarchy: {
+            rules: [],
+            section: 'v1',
+            userStory: { id: 'us-2', title: 'Consulter le catalogue', body: 'En tant que...' },
+          },
+          glossary: [{ term: 'Commande', definitions: { default: 'Demande client' } }],
+        },
       ],
-    });
+    };
+
+    await driver.givenAnIterationRefinementRequestWasSent(request);
     await driver.whenClaudeCallsGetIterationRefinementRequest();
-    driver.thenThePendingRequestIsReturned({
-      section: 'v1',
-      userStories: [
-        {
-          hierarchy: {
-            rule: {
-              id: 'rule-1',
-              title: 'Validation des commandes',
-              body: 'Une commande doit avoir au moins une ligne',
-              examples: [
-                { id: 'ex-1', body: 'Commande avec 0 ligne -> refusée' },
-                { id: 'ex-2', body: 'Commande avec 1 ligne -> acceptée' },
-              ],
-            },
-            rules: [
-              {
-                id: 'rule-1',
-                title: 'Validation des commandes',
-                body: 'Une commande doit avoir au moins une ligne',
-                examples: [
-                  { id: 'ex-1', body: 'Commande avec 0 ligne -> refusée' },
-                  { id: 'ex-2', body: 'Commande avec 1 ligne -> acceptée' },
-                ],
-              },
-            ],
-            section: 'v1',
-            userStory: { id: 'us-1', title: 'Saisir une commande', body: 'En tant que...' },
-          },
-          glossary: [{ term: 'Commande', definitions: { default: 'Demande client' } }],
-        },
-      ],
-    });
+    driver.thenThePendingRequestIsReturned(request);
   });
 
   test('Claude ne trouve aucune demande de raffinement en attente', async () => {

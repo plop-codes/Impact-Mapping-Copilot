@@ -114,37 +114,96 @@ function absoluteXOf(nodeId: string): number {
   return Number.POSITIVE_INFINITY;
 }
 
-type IterationUserStory = { hierarchy: HierarchyContext; glossary: GlossaryEntry[] };
+type IterationHierarchy = {
+  userStory: { id: string; title: string; body?: string; boundedContext?: string; domain?: string };
+  rules: HierarchyRule[];
+  section?: string;
+  action?: { id: string; title: string };
+  impact?: { id: string; title: string };
+  actor?: { id: string; title: string };
+  objective?: { id: string; title: string };
+};
+type IterationUserStory = { hierarchy: IterationHierarchy; glossary: GlossaryEntry[] };
+
+function buildUserStoryHierarchy(
+  us: HierarchizedElementJson,
+  byId: Map<string, HierarchizedElementJson>,
+): IterationHierarchy {
+  const exampleChildrenOf = (ruleElement: HierarchizedElementJson): HierarchyExample[] =>
+    ruleElement.childrenIds
+      .map((childId) => byId.get(childId))
+      .filter((el): el is HierarchizedElementJson => !!el && el.type === 'SCENARIO')
+      .map((el) => ({ id: el.id, body: (el.text ?? el.body ?? el.title ?? '').trim() }))
+      .filter((ex) => ex.body.length > 0);
+
+  const toRule = (ruleElement: HierarchizedElementJson): HierarchyRule => {
+    const examples = exampleChildrenOf(ruleElement);
+    return {
+      id: ruleElement.id,
+      title: ruleElement.title,
+      body: ruleElement.body,
+      ...(examples.length > 0 ? { examples } : {}),
+    };
+  };
+
+  const rules = us.childrenIds
+    .map((childId) => byId.get(childId))
+    .filter((el): el is HierarchizedElementJson => !!el && el.type === 'RULE')
+    .map(toRule);
+
+  const result: IterationHierarchy = {
+    userStory: {
+      id: us.id,
+      title: us.title,
+      body: us.body,
+      boundedContext: us.boundedContext,
+      domain: us.domain,
+    },
+    rules,
+  };
+
+  if (us.release) {
+    result.section = us.release;
+  }
+
+  const action = us.parentId ? byId.get(us.parentId) : undefined;
+  if (action && action.type === 'ACTION') {
+    result.action = { id: action.id, title: action.title };
+
+    const impact = action.parentId ? byId.get(action.parentId) : undefined;
+    if (impact && impact.type === 'IMPACT') {
+      result.impact = { id: impact.id, title: impact.title };
+
+      const actor = impact.parentId ? byId.get(impact.parentId) : undefined;
+      if (actor && actor.type === 'ACTOR') {
+        result.actor = { id: actor.id, title: actor.title };
+
+        const objective = actor.parentId ? byId.get(actor.parentId) : undefined;
+        if (objective && objective.type === 'OBJECTIVE') {
+          result.objective = { id: objective.id, title: objective.title };
+        }
+      }
+    }
+  }
+
+  return result;
+}
 
 function buildIterationContext(
   section: string,
   elements: HierarchizedElementJson[],
   glossary: GlossaryEntry[],
 ): IterationUserStory[] {
+  const byId = new Map(elements.map((e) => [e.id, e]));
+
   const userStories = elements.filter(
     (el) => el.type === 'USER_STORY' && el.release === section,
   );
 
-  const sorted = userStories
+  return userStories
     .map((us) => ({ us, x: absoluteXOf(us.id) }))
     .sort((a, b) => a.x - b.x)
-    .map((entry) => entry.us);
-
-  const result: IterationUserStory[] = [];
-  for (const us of sorted) {
-    const firstRuleId = us.childrenIds.find((id) => {
-      const child = elements.find((e) => e.id === id);
-      return child?.type === 'RULE';
-    });
-    if (!firstRuleId) continue;
-
-    const hierarchy = buildHierarchyContext(firstRuleId, elements);
-    if ('error' in hierarchy) continue;
-
-    result.push({ hierarchy, glossary });
-  }
-
-  return result;
+    .map((entry) => ({ hierarchy: buildUserStoryHierarchy(entry.us, byId), glossary }));
 }
 
 function computeKnownIds(): Set<string> {
@@ -264,7 +323,7 @@ if (initialResult.isFailure()) {
         figma.ui.postMessage({
           type: 'ITERATION_CONTEXT',
           success: false,
-          error: `Aucune User Story avec au moins une règle trouvée dans la section "${section}"`,
+          error: `Aucune User Story trouvée dans la section "${section}"`,
         });
         return;
       }
