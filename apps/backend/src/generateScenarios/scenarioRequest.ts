@@ -1,5 +1,6 @@
 export type HierarchyNode = { id: string; title: string };
-export type HierarchyRule = { id: string; title: string; body?: string };
+export type HierarchyExample = { id: string; body: string };
+export type HierarchyRule = { id: string; title: string; body?: string; examples?: HierarchyExample[] };
 export type HierarchyUserStory = {
   id: string;
   title: string;
@@ -10,6 +11,8 @@ export type HierarchyUserStory = {
 
 export type HierarchyContext = {
   rule: HierarchyRule;
+  rules?: HierarchyRule[];
+  section?: string;
   userStory?: HierarchyUserStory;
   action?: HierarchyNode;
   impact?: HierarchyNode;

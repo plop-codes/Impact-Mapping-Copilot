@@ -3,12 +3,15 @@ const MCP_SERVER_URL = 'http://localhost:3333';
 const progressDiv = document.getElementById('progress') as HTMLDivElement;
 const selectionInfoDiv = document.getElementById('selectionInfo') as HTMLDivElement;
 const generateScenariosBtn = document.getElementById('generateScenariosBtn') as HTMLButtonElement;
+const refineIterationBtn = document.getElementById('refineIterationBtn') as HTMLButtonElement;
 const clearLogsBtn = document.getElementById('clearLogsBtn') as HTMLButtonElement;
 
 let selectedRuleId: string | null = null;
 let selectedRuleTitle: string | null = null;
+let selectedSectionName: string | null = null;
 let autoClearTimer: ReturnType<typeof setTimeout> | null = null;
 let scenarioContextResolve: ((value: { hierarchy: unknown; glossary: unknown } | { error: string }) => void) | null = null;
+let iterationContextResolve: ((value: { section: unknown; userStories: unknown } | { error: string }) => void) | null = null;
 
 function clearLogs(): void {
   progressDiv.innerHTML = '';
@@ -50,6 +53,26 @@ onmessage = (event: MessageEvent) => {
       selectedRuleId = null;
       selectedRuleTitle = null;
       generateScenariosBtn.disabled = true;
+    }
+
+    const section = msg.selectedSection as { name: string } | null;
+    if (section) {
+      selectedSectionName = section.name;
+      refineIterationBtn.disabled = false;
+    } else {
+      selectedSectionName = null;
+      refineIterationBtn.disabled = true;
+    }
+  }
+
+  if (msg.type === 'ITERATION_CONTEXT') {
+    if (iterationContextResolve) {
+      if (msg.success) {
+        iterationContextResolve({ section: msg.section, userStories: msg.userStories });
+      } else {
+        iterationContextResolve({ error: msg.error as string });
+      }
+      iterationContextResolve = null;
     }
   }
 
@@ -102,5 +125,37 @@ generateScenariosBtn.addEventListener('click', async () => {
   }).catch(() => {
     log('Erreur: MCP server non disponible', 'error');
     generateScenariosBtn.disabled = false;
+  });
+});
+
+refineIterationBtn.addEventListener('click', async () => {
+  if (!selectedSectionName) return;
+
+  refineIterationBtn.disabled = true;
+  log('Analyse des User Stories de l\'iteration...', 'success');
+
+  const contextResult = await new Promise<{ section: unknown; userStories: unknown } | { error: string }>((resolve) => {
+    iterationContextResolve = resolve;
+    postToPlugin('REQUEST_ITERATION_CONTEXT', { section: selectedSectionName });
+  });
+
+  if ('error' in contextResult) {
+    log(`Erreur analyse iteration: ${contextResult.error}`, 'error');
+    refineIterationBtn.disabled = false;
+    return;
+  }
+
+  log('Demande de raffinement envoyee a Claude...', 'success');
+
+  fetch(`${MCP_SERVER_URL}/iteration-refinement-request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      section: contextResult.section,
+      userStories: contextResult.userStories,
+    }),
+  }).catch(() => {
+    log('Erreur: MCP server non disponible', 'error');
+    refineIterationBtn.disabled = false;
   });
 });

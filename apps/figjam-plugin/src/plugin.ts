@@ -7,7 +7,7 @@ import { FigmaBoardWriter } from './modules/boardEdition/createBoardElement/crea
 import type { ParentInfo } from './modules/boardEdition/createBoardElement/createBoardElement.boardElement';
 import { AnalyzeContextElementsFigmaContextReader } from './modules/boardAnalysis/analyzeContextElements/analyzeContextElements.figmaContextReader';
 import { AnalyzeContextElementsUseCase } from './modules/boardAnalysis/analyzeContextElements/analyzeContextElements.useCase';
-import type { ContextElementsJson } from './modules/boardAnalysis/analyzeContextElements/contextElements';
+import type { ContextElementsJson, GlossaryEntry } from './modules/boardAnalysis/analyzeContextElements/contextElements';
 
 figma.showUI(__html__, { width: 400, height: 500 });
 
@@ -16,8 +16,12 @@ const analyzeImpactMap = new AnalyzeImpactMapUseCase(boardReader);
 const contextReader = new AnalyzeContextElementsFigmaContextReader();
 const analyzeContextElements = new AnalyzeContextElementsUseCase(contextReader);
 
+type HierarchyExample = { id: string; body: string };
+type HierarchyRule = { id: string; title: string; body?: string; examples?: HierarchyExample[] };
 type HierarchyContext = {
-  rule: { id: string; title: string; body?: string };
+  rule: HierarchyRule;
+  rules?: HierarchyRule[];
+  section?: string;
   userStory?: { id: string; title: string; body?: string; boundedContext?: string; domain?: string };
   action?: { id: string; title: string };
   impact?: { id: string; title: string };
@@ -35,8 +39,25 @@ function buildHierarchyContext(
     return { error: `Rule ${ruleId} introuvable ou de mauvais type` };
   }
 
+  const exampleChildrenOf = (ruleElement: HierarchizedElementJson): HierarchyExample[] =>
+    ruleElement.childrenIds
+      .map((childId) => byId.get(childId))
+      .filter((el): el is HierarchizedElementJson => !!el && el.type === 'SCENARIO')
+      .map((el) => ({ id: el.id, body: (el.text ?? el.body ?? el.title ?? '').trim() }))
+      .filter((ex) => ex.body.length > 0);
+
+  const toRule = (ruleElement: HierarchizedElementJson): HierarchyRule => {
+    const examples = exampleChildrenOf(ruleElement);
+    return {
+      id: ruleElement.id,
+      title: ruleElement.title,
+      body: ruleElement.body,
+      ...(examples.length > 0 ? { examples } : {}),
+    };
+  };
+
   const result: HierarchyContext = {
-    rule: { id: rule.id, title: rule.title, body: rule.body },
+    rule: toRule(rule),
   };
 
   const us = rule.parentId ? byId.get(rule.parentId) : undefined;
@@ -48,6 +69,18 @@ function buildHierarchyContext(
       boundedContext: us.boundedContext,
       domain: us.domain,
     };
+
+    const siblingRules = us.childrenIds
+      .map((childId) => byId.get(childId))
+      .filter((el): el is HierarchizedElementJson => !!el && el.type === 'RULE')
+      .map(toRule);
+    if (siblingRules.length > 0) {
+      result.rules = siblingRules;
+    }
+
+    if (us.release) {
+      result.section = us.release;
+    }
 
     const action = us.parentId ? byId.get(us.parentId) : undefined;
     if (action && action.type === 'ACTION') {
@@ -73,6 +106,47 @@ function buildHierarchyContext(
   return result;
 }
 
+function absoluteXOf(nodeId: string): number {
+  const node = figma.getNodeById(nodeId);
+  if (node && 'absoluteTransform' in node) {
+    return (node as SceneNode & { absoluteTransform: Transform }).absoluteTransform[0][2];
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+type IterationUserStory = { hierarchy: HierarchyContext; glossary: GlossaryEntry[] };
+
+function buildIterationContext(
+  section: string,
+  elements: HierarchizedElementJson[],
+  glossary: GlossaryEntry[],
+): IterationUserStory[] {
+  const userStories = elements.filter(
+    (el) => el.type === 'USER_STORY' && el.release === section,
+  );
+
+  const sorted = userStories
+    .map((us) => ({ us, x: absoluteXOf(us.id) }))
+    .sort((a, b) => a.x - b.x)
+    .map((entry) => entry.us);
+
+  const result: IterationUserStory[] = [];
+  for (const us of sorted) {
+    const firstRuleId = us.childrenIds.find((id) => {
+      const child = elements.find((e) => e.id === id);
+      return child?.type === 'RULE';
+    });
+    if (!firstRuleId) continue;
+
+    const hierarchy = buildHierarchyContext(firstRuleId, elements);
+    if ('error' in hierarchy) continue;
+
+    result.push({ hierarchy, glossary });
+  }
+
+  return result;
+}
+
 function computeKnownIds(): Set<string> {
   const analyzeResult = analyzeImpactMap.execute();
   if (analyzeResult.isFailure()) {
@@ -91,12 +165,23 @@ if (initialResult.isFailure()) {
 } else {
   let knownIds = computeKnownIds();
 
+  function getSelectedSection(): { name: string } | null {
+    const selection = figma.currentPage.selection;
+    if (selection.length !== 1) return null;
+    const node = selection[0];
+    if (node.type !== 'SECTION') return null;
+    const name = node.name?.trim() ?? '';
+    if (!name) return null;
+    return { name };
+  }
+
   function sendSelectionUpdate(): void {
     const selectedElementIds = figma.currentPage.selection
       .map((node) => node.id)
       .filter((id) => knownIds.has(id));
     const selectedParent = getSelectedParent();
-    figma.ui.postMessage({ type: 'SELECTION_CHANGED', selectedElementIds, selectedParent });
+    const selectedSection = getSelectedSection();
+    figma.ui.postMessage({ type: 'SELECTION_CHANGED', selectedElementIds, selectedParent, selectedSection });
   }
 
   figma.on('selectionchange', sendSelectionUpdate);
@@ -158,6 +243,37 @@ if (initialResult.isFailure()) {
         success: true,
         hierarchy,
         glossary,
+      });
+    }
+    if (msg.type === 'REQUEST_ITERATION_CONTEXT') {
+      const section = msg.section as string;
+      const impactMapResult = analyzeImpactMap.execute();
+      if (impactMapResult.isFailure()) {
+        figma.ui.postMessage({ type: 'ITERATION_CONTEXT', success: false, error: impactMapResult.getError() });
+        return;
+      }
+
+      const elements = impactMapResult.getValue<ImpactMappingJson>().hierarchizedElements;
+      const contextResult = analyzeContextElements.execute();
+      const glossary = contextResult.isSuccess()
+        ? contextResult.getValue<ContextElementsJson>().glossary ?? []
+        : [];
+
+      const userStories = buildIterationContext(section, elements, glossary);
+      if (userStories.length === 0) {
+        figma.ui.postMessage({
+          type: 'ITERATION_CONTEXT',
+          success: false,
+          error: `Aucune User Story avec au moins une règle trouvée dans la section "${section}"`,
+        });
+        return;
+      }
+
+      figma.ui.postMessage({
+        type: 'ITERATION_CONTEXT',
+        success: true,
+        section,
+        userStories,
       });
     }
     if (msg.type === 'CREATE_BOARD_ELEMENT') {

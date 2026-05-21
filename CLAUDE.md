@@ -74,7 +74,8 @@ Le serveur MCP est lancé **automatiquement par Claude Code** via la config `.mc
 Le plugin garde **uniquement** :
 1. Lire le board d'impact mapping (analyse des shapes, connecteurs, sections, propagation des releases)
 2. Pousser des `scenarioRequest` au backend MCP via HTTP POST `/scenario-request` (avec `ruleId`, `ruleTitle`, `hierarchy` agrégée, `glossary`) quand l'utilisateur clique "Générer les scénarios de cette règle"
-3. Créer manuellement de nouveaux éléments (OBJECTIVE, ACTOR, IMPACT, ACTION, USER_STORY, RULE) sur le board
+3. Pousser une `iterationRefinementRequest` au backend MCP via HTTP POST `/iteration-refinement-request` (avec `section` + toutes les US de la section triées par x, chacune avec `hierarchy` + `glossary`) quand l'utilisateur sélectionne une **SECTION** et clique "Raffiner les US de cette itération"
+4. Créer manuellement de nouveaux éléments (OBJECTIVE, ACTOR, IMPACT, ACTION, USER_STORY, RULE) sur le board
 
 Le plugin a **perdu** :
 - Toute la sync GitHub (rapatriée dans `apps/github-sync/` et orchestrée depuis Claude Code)
@@ -152,11 +153,22 @@ apps/github-sync/
 ```
 generateScenarios/
 ├── generateScenarios.module.ts            # Wiring MCP tool + HTTP listeners + routes /__internal/* (proxy)
-├── scenarioRequest.ts                     # Types : ScenarioRequest + HierarchyContext + GlossaryEntry
+├── scenarioRequest.ts                     # Types : ScenarioRequest + HierarchyContext + HierarchyRule (+ examples) + GlossaryEntry
 ├── scenarioRequest.inMemoryRepository.ts  # Repository in-memory partagée store/get (1 demande courante)
 ├── storeScenariosRequest/                 # HTTP listener : reçoit scenarioRequest (ruleId + ruleTitle + hierarchy + glossary) du plugin FigJam sur POST /scenario-request
 └── getScenariosRequest/                   # MCP tool : get_scenario_request — retourne la demande complète avec hiérarchie et glossaire (+ httpRepository en mode proxy)
+
+refineIteration/
+├── refineIteration.module.ts                       # Wiring MCP tool + HTTP listener + routes /__internal/iteration-refinement-request/* (proxy)
+├── iterationRefinementRequest.ts                   # Types : IterationRefinementRequest { section, userStories: { hierarchy, glossary }[] }
+├── iterationRefinementRequest.inMemoryRepository.ts# Repository in-memory partagée store/get (1 demande courante)
+├── storeIterationRefinementRequest/                # HTTP listener : reçoit la demande (section + toutes les US triées par x avec règles + examples) sur POST /iteration-refinement-request
+└── getIterationRefinementRequest/                  # MCP tool : get_user_stories_in_iteration_for_refinement — retourne toutes les US d'une section (+ httpRepository en mode proxy)
 ```
+
+### Examples sur une règle (atelier d'impact mapping)
+
+Une `HierarchyRule` peut porter un champ `examples: { id, body }[]` : ce sont les shapes FigJam **SCENARIO enfants du shape de la règle**, c.-à-d. les exemples concrets discutés avec le métier en atelier. Ce **ne sont pas** des scénarios de test exploitables (ceux-ci naissent plus tard comme sub-issues GitHub). Extraits côté plugin dans `buildHierarchyContext()` (texte pris depuis `el.text` du SCENARIO), exposés par les deux tools MCP (`get_scenario_request` et `get_user_stories_in_iteration_for_refinement`).
 
 Les modules supprimés (historique) :
 - `submitScenarios/` : la source de vérité des scénarios est désormais GitHub (sub-issues créées par le CLI `github-sync`)

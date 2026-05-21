@@ -3,6 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createPluginConnection, type PluginConnection } from '../../pluginConnection.js';
 import { GenerateScenariosModule } from '../../../generateScenarios/generateScenarios.module.js';
+import { RefineIterationModule } from '../../../refineIteration/refineIteration.module.js';
 
 export class TestApp {
   private static sharedInstance: TestApp | null = null;
@@ -36,6 +37,7 @@ export class TestApp {
     });
 
     new GenerateScenariosModule(mcpServer, connection);
+    new RefineIterationModule(mcpServer, connection);
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await mcpServer.connect(serverTransport);
@@ -60,6 +62,7 @@ export class TestApp {
 
   async reset(): Promise<void> {
     await fetch(`${this.httpBaseUrl}/__internal/scenario-request/clear`, { method: 'POST' });
+    await fetch(`${this.httpBaseUrl}/__internal/iteration-refinement-request/clear`, { method: 'POST' });
   }
 
   private async cleanup(): Promise<void> {

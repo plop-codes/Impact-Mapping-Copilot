@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createPluginConnection } from './shared/pluginConnection.js';
 import { GenerateScenariosModule } from './generateScenarios/generateScenarios.module.js';
+import { RefineIterationModule } from './refineIteration/refineIteration.module.js';
 
 const HTTP_PORT = parseInt(process.env['MCP_HTTP_PORT'] ?? '3333', 10);
 
@@ -14,6 +15,7 @@ async function main(): Promise<void> {
   });
 
   new GenerateScenariosModule(server, connection);
+  new RefineIterationModule(server, connection);
   process.stderr.write(`[mcp] Mode: ${connection.isProxy() ? 'proxy' : 'primary'}\n`);
 
   const transport = new StdioServerTransport();
