@@ -58,6 +58,8 @@ Le serveur MCP est lancé **automatiquement par Claude Code** via la config `.mc
 
 **Mode primary vs proxy** : une seule instance peut binder le port 3333 (l'instance *primary*). Toute instance lancée alors que le port est déjà pris démarre automatiquement en mode *proxy* : son transport MCP stdio sert normalement le tool `get_scenario_request`, mais la repository est remplacée par des appels HTTP `/__internal/scenario-request/get` vers l'instance primary. Permet d'ouvrir plusieurs sessions Claude Code (plusieurs projets) partageant la même demande plugin courante. Implémenté dans `apps/backend/src/shared/pluginConnection.ts` et `apps/backend/src/generateScenarios/generateScenarios.module.ts`.
 
+**Cycle de vie / arrêt propre** : le serveur HTTP (port 3333) garde l'event loop Node vivante. Sans terminaison explicite, le process survivrait en orphelin après la fin d'une session Claude Code (transport stdio coupé mais port toujours bindé) → le MCP afficherait `failed` au redémarrage suivant car l'orphelin squatte 3333. `index.ts` écoute donc la **fermeture de stdin** (`'end'`/`'close'` = session Claude Code terminée ou `/clear`) ainsi que `SIGTERM`/`SIGINT`, et appelle `connection.close()` puis `process.exit(0)`. Si malgré tout un orphelin subsiste (ancien binaire sans ce correctif, `kill -9`…), `npm run server:stop` libère le port.
+
 **Scripts npm racine** pour gérer une instance primary persistante indépendante d'une session Claude Code :
 - `npm run server:start` — lance le backend en background sur :3333, logs dans `/tmp/impact-mapping-copilot.log`
 - `npm run server:stop` — kill ce qui écoute sur :3333
